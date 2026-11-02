@@ -1,0 +1,122 @@
+# ROLE & OBJECTIVE
+Continue building **IKI (Industrial Knowledge Intelligence)** — Phase 2: PyMuPDF Page-Level Ingestion, Strict Machine-Isolated Vector Store, Multi-Document Grounded RAG Engine, and Official Dataset Seeder.
+
+# MANDATORY VIBE-CODING LOGGING PROTOCOL (CRITICAL)
+Before and after every file creation or modification, AND inside `VIBE_CHANGELOG.md`, you MUST log every change using this exact structure:
+1. **WHAT Changed:** Exact file paths created, updated, or deleted, and functions/classes modified.
+2. **HOW It Changed:** The technical mechanism, algorithms, data structures, and API integrations used.
+3. **WHY It Changed:** The exact hackathon evaluation requirement satisfied by this change.
+
+---
+
+# CRITICAL ENVIRONMENT RULE (NO PYTORCH / CHROMADB HANGS)
+Do NOT run `pip install sentence-transformers` or `pip install chromadb` if it triggers heavy PyTorch/ONNX compilation timeouts. Instead, use lightweight packages (`numpy`, `scikit-learn` if available, or pure Python/NumPy math + `google-genai` / `groq`) to implement a fast, persistent local Vector Store (`media/vector_index/iki_vectors.json` or SQLite-backed vector table) with real dense vector embeddings and cosine similarity.
+
+---
+
+# PHASE 2 SCOPE: OFFICIAL CORPUS INGESTION, VECTOR STORE & STRICT RAG ENGINE
+
+## 1. Locate or Reconstruct the Exact 3 Official Manuals & `machine_manual_index.csv`
+- First, search the current workspace, parent directories (`..`, `../Manuals`, `./Manuals`), and uploads for:
+  1. `machine_manual_index.csv`
+  2. `HP200_Operations_Rev1_0.pdf` (Document ID: `HP-OPS-01`, Machine: `M-HP200` / `HP-200`, Revision: `1.0`, 3 pages)
+  3. `HP200_Maintenance_Rev1_0.pdf` (Document ID: `HP-MNT-01`, Machine: `M-HP200` / `HP-200`, Revision: `1.0`, 3 pages)
+  4. `AC90_Operations_Maintenance_Rev1_0.pdf` (Document ID: `AC-OM-01`, Machine: `M-AC90` / `AC-90`, Revision: `1.0`, 3 pages)
+- Remove any dummy/placeholder manuals created in Phase 1 (such as `HP200_Operations_Manual.pdf` or `AC90_Compressor_Manual.pdf`) from the database, `media/manuals/`, and vector index.
+- **IMPORTANTRule**: Index ONLY the three official PDFs (`HP-OPS-01`, `HP-MNT-01`, `AC-OM-01`) as the answer corpus. Do NOT index the challenge brief, `START_HERE.txt`, or `machine_manual_index.csv` as searchable passages.
+- If the 3 official PDF files are found on disk, copy them into `media/manuals/` with their exact filenames (`HP200_Operations_Rev1_0.pdf`, `HP200_Maintenance_Rev1_0.pdf`, `AC90_Operations_Maintenance_Rev1_0.pdf`).
+- If the PDF files are not found in the local folder path, generate the exact verbatim 3-page PDFs in `media/manuals/` using PyMuPDF (`fitz`) with the exact official content and page structure:
+  - **`HP200_Operations_Rev1_0.pdf` (`HP-OPS-01`, `M-HP200`, Rev `1.0`)**:
+    - **Page 1**: Equipment identity (enclosed hydraulic forming press shaping small metal blanks using a hydraulic ram; reference fluid: H46 hydraulic oil). Operating reference values: Normal hydraulic pressure: 120 to 140 bar during the forming stage; Oil temperature ready range: 35 to 55 degrees C; Oil temperature high warning: Above 60 degrees C; Oil temperature high stop: 65 degrees C or higher; Reservoir level indication: Between MIN and MAX sight-glass marks; Pressure-low trigger: Below 110 bar for more than 5 seconds during forming. Machine states: OFF, READY (requires guard-closed indicator, oil level within marked range, oil temperature in ready range), FORMING, HOLD (fault interrupted cycle; recorded review required). Document map: complements `HP-MNT-01` Rev 1.0.
+    - **Page 2**: Pre-cycle review (check machine ID, displayed state, guard-closed indicator, reservoir level MIN/MAX, record oil temperature; never bypass guard interlock). Alarm codes: `E17` = Low hydraulic pressure (Record pressure and cycle stage; place on HOLD and request checks in `HP-MNT-01` page 3; generated when pressure stays below 110 bar for more than 5 seconds during forming; does not prove pump failure); `E24` = Oil temperature high warning (Above 60 degrees C: hold cycle and request cooling-system inspection; at 65 degrees C or higher, high-temperature stop applies; 62 degrees C requires hold and cooling-system inspection; no guaranteed cooldown duration provided); `E31` = Guard-open indication (Keep cycle inhibited; never bypass interlock); `E42` = Return-filter restriction (Record indicator state and request filter inspection in `HP-MNT-01` page 2).
+    - **Page 3**: Fault reporting and Scope of Guidance. An `HP-200` escalation record includes: machine ID `M-HP200`, timestamp, active alarm code, displayed pressure, oil temperature, cycle stage, reservoir indication, visible leak observations, and whether the issue repeated. Record observations separately from suspected causes. If `E17` repeats after documented checks, keep on HOLD and escalate to authorized maintenance with previous incident reference; do not raise pressure setting to suppress alarm. Operator records symptoms, authorized maintenance reviews findings, supervisor records resolution decision. Information not provided: pump replacement price, supplier contacts, tightening torque, wiring diagrams, hydraulic circuit drawings, internal repair procedures, pressure adjustment instructions, cycle-time guarantee, service contract coverage, future failure date, or remaining useful life.
+  - **`HP200_Maintenance_Rev1_0.pdf` (`HP-MNT-01`, `M-HP200`, Rev `1.0`)**:
+    - **Page 1**: Coverage (complements `HP-OPS-01` Rev 1.0 for `M-HP200`). Maintenance reference data: Hydraulic fluid = H46 hydraulic oil; Return-filter identifier = RF-20; Reservoir level = Between MIN and MAX marks; Oil replacement interval = Every 2,000 operating hours or 12 months, whichever occurs first; Return-filter planned replacement = Every 500 operating hours or earlier after confirmed restriction; Condition requiring escalation = Repeated alarms, confirmed leaks, or an abnormal indicator that persists. Recording completed work: record machine ID, operating-hour reading, date, inspection item, observation, action reference, and reviewer.
+    - **Page 2**: Inspection Schedule and Filter Reference: Before each shift = Reservoir sight-glass and visible leakage (Record MIN-to-MAX indication; report low level or visible leak); Every 50 operating hours = Return-filter restriction indicator for RF-20 (Record indicator state; restriction indication requires maintenance review); Every 250 operating hours = Cooling-air path and external hose condition (Record obstruction, visible damage, or leakage; escalate abnormalities); Every 500 operating hours = Planned RF-20 replacement (Record replacement reference and reviewer; earlier replacement may follow confirmed restriction; calendar interval for RF-20 replacement is not specified); Every 2,000 hours or 12 months = Planned H46 oil replacement (whichever occurs first; record hours and date). `E42` refers to return-filter restriction on `HP-200` for filter `RF-20`.
+    - **Page 3**: Troubleshooting Observations and Escalation. Low hydraulic pressure or `E17`: Collect observations in order: (1) reservoir level relative to MIN and MAX; (2) visible external leakage reported by the operator; (3) RF-20 restriction-indicator state; (4) oil temperature and the recorded pressure during forming. Use `HP-OPS-01` to interpret pressure and temperature values. If `E17` repeats after review, retain HOLD status and escalate to authorized maintenance with findings and prior incident reference. High oil temperature or `E24`: Review cooling-air path for reported obstruction, cooling-fan status indication, reservoir level, and recent operating pattern. Escalation record: Include machine ID, date and time, hours, alarm code, pressure, oil temperature, reservoir level, leak observation, filter indicator, cooling-fan indication where relevant, previous incident ID, and reviewer. Return-to-service authorization belongs to the designated supervisor.
+  - **`AC90_Operations_Maintenance_Rev1_0.pdf` (`AC-OM-01`, `M-AC90`, Rev `1.0`)**:
+    - **Page 1**: Equipment identity (enclosed air compressor supplying compressed air; uses `AC-L32` compressor lubricant; different machine from HP-200 hydraulic press). Operating reference values: Normal outlet pressure = 7.0 to 8.0 bar under steady demand; Pressure-low warning = Below 6.5 bar for more than 10 seconds under steady demand; Discharge temperature normal range = 70 to 90 degrees C; High discharge-temperature warning = Above 95 degrees C; High discharge-temperature stop = 105 degrees C or higher; Lubricant level indication = Between LOW and HIGH marks. Operating states: READY, LOADED, HOLD. Single complete reference for `M-AC90`.
+    - **Page 2**: Alarm Reference and Diagnostic Limits: `E17` = High discharge temperature (Record temperature; above 95 degrees C, hold and request cooling-path review; at 105 degrees C or higher, high-temperature stop applies. Review reported cooling-air path condition, cooling-fan status indication, lubricant-level indication, and recent demand pattern. 98 degrees C exceeds warning level but is below stop threshold; keep on HOLD); `E08` = Low outlet pressure (Below 6.5 bar for more than 10 seconds under steady demand: record demand and pressure; request leak and inlet-filter review; check `AF-10` restriction indication); `E31` = Condensate-drain fault (Record drain fault indication and request authorized drain inspection; NOT a guard-open code on AC-90); `E42` = Inlet-filter restriction (Record inlet-filter indicator and review `AF-10` service history).
+    - **Page 3**: Maintenance Schedule and Escalation: Before each shift = Lubricant level (`LOW-to-HIGH`) and condensate-drain status; Every 100 operating hours = `AF-10` inlet-filter restriction indicator (record indicator state and abnormal findings); Every 400 operating hours = External cooling-air path (record obstruction observation and reviewer); Every 600 operating hours = Planned `AF-10` replacement (record part identifier, hours, date, reviewer; calendar interval not supplied; HP-200 RF-20 is not the AC-90 filter); Every 3,000 hours or 12 months = Planned `AC-L32` lubricant replacement (whichever occurs first; record date and hours). Escalation and review: Record machine ID `M-AC90`, timestamp, operating hours, active alarm, outlet pressure, discharge temperature, demand state, lubricant indication, filter indication, drain status where relevant, and previous incident reference. Information not provided: maintenance costs, spare-part prices, supplier contacts, electrical diagrams, tightening torques, motor rewinding steps, compressor-element replacement steps, expected remaining life, or guaranteed repair time.
+
+## 2. PyMuPDF Ingestion & Vector Store (`manuals_app/rag_engine.py` & `manuals_app/vector_store.py`)
+Build a clean, modular ingestion and vector retrieval pipeline:
+1. **PDF Extraction (`extract_passages_from_pdf`)**:
+   - Use PyMuPDF (`import fitz`) to open the PDF file.
+   - Iterate page-by-page (`for page_idx, page in enumerate(doc): page_number = page_idx + 1`). Page 1 of each PDF MUST be `page_number = 1`.
+   - Split each page into meaningful passages (or keep full page text + section chunks of ~600–900 characters with 150-character overlap using `langchain_text_splitters.RecursiveCharacterTextSplitter` or clean paragraph/section splitting so tables and alarm definitions stay intact on their exact page).
+   - Attach mandatory metadata to every single chunk:
+     ```json
+     {
+       "chunk_id": "HP-OPS-01_p2_c0",
+       "machine_id": "M-HP200",
+       "machine_name": "HP-200",
+       "doc_id": "HP-OPS-01",
+       "filename": "HP200_Operations_Rev1_0.pdf",
+       "revision": "1.0",
+       "page_number": 2,
+       "text": "...",
+       "pdf_url": "/media/manuals/HP200_Operations_Rev1_0.pdf#page=2"
+     }
+     ```
+2. **Embeddings & Persistent Vector Store (`IKIVectorStore`)**:
+   - Compute a dense numerical embedding vector for each passage (support `google-genai` embedding model if `GEMINI_API_KEY` is configured, with an automatic deterministic local dense embedding model using normalized character/word n-gram & domain-term SVD/projection vectors in NumPy so embeddings work 100% offline with zero network timeouts).
+   - Persist all vectors and metadata to disk (`media/vector_index/vector_store.json`).
+   - Provide `delete_by_doc_id(doc_id)` and `clear_all()` methods.
+3. **STRICT Pre-Filtered Retrieval (`retrieve_for_machine(machine_id, query, top_k=5)`)**:
+   - **CRITICAL REQUIREMENT**: Filter the vector store entries **FIRST** by `entry["machine_id"] == machine_id` BEFORE computing similarity scores!
+   - An `M-HP200` query must NEVER consider, score, or return any chunk where `machine_id != "M-HP200"`.
+   - Combine dense cosine similarity with exact technical token boosting (for alarm codes like `E17`, `E24`, `E31`, `E42`, `E08`, filter IDs like `RF-20`, `AF-10`, fluids like `H46`, `AC-L32`, and topics like `pressure`, `temperature`, `filter`, `escalation`, `record`, `schedule`, `oil`, `lubricant`).
+   - **Multi-Document Complementarity for `M-HP200`**: When `machine_id == "M-HP200"` and a query touches alarm codes (`E17`, `E24`, `E42`), troubleshooting, filter inspection, or escalation, ensure the top retrieved passages automatically include relevant supporting pages from **BOTH** `HP-OPS-01` and `HP-MNT-01` so the answer cites both complementary manuals.
+
+## 3. Grounded Answer & Citation Generator (`generate_grounded_answer(machine, question)`)
+Implement the RAG generation workflow:
+1. **Cross-Machine & Unanswerable Pre-Checks**:
+   - Detect if the question explicitly asks about another machine or another machine's exclusive parts/alarms:
+     - If selected machine is `M-HP200` and question asks about `AC-90`, `M-AC90`, `AF-10`, `AC-L32`, `E08`, `condensate-drain`, or `compressor`: immediately return `status = "insufficient_evidence"`, empty `citations = []` (or clearly state that the selected `M-HP200` manuals do not contain information about `AC-90` equipment), and message: `"Insufficient evidence: The available manuals for M-HP200 (HP-200) do not contain information regarding AC-90 equipment, AF-10 filters, or AC-L32 lubricant. Please select the appropriate machine or consult its manual."`
+     - If selected machine is `M-AC90` and question asks about `HP-200`, `M-HP200`, `RF-20`, `H46`, `E24`, `forming stage`, or `hydraulic press`: immediately return `status = "insufficient_evidence"`, empty `citations = []`, and state that the available manuals for `M-AC90 (AC-90)` do not contain information about `HP-200` hydraulic press components.
+   - Detect if the question asks for explicitly excluded/unprovided information (e.g., price, cost, supplier contact, wiring/electrical diagram, hydraulic circuit drawing, tightening torque, motor rewinding, internal repair steps, pressure adjustment instructions, remaining useful life, predicted failure date, or guaranteed cooldown/repair time) or topics completely absent from the retrieved passages (similarity score below threshold):
+     - Return `status = "insufficient_evidence"`, explain clearly that the supplied manuals for the selected machine explicitly state this information is not provided, and cite the relevant "Information not provided" page if applicable (or return no fabricated citations).
+2. **LLM Grounded Generation (with Deterministic Grounded Fallback)**:
+   - If `GROQ_API_KEY` or `GEMINI_API_KEY` is configured in `.env`, call the LLM with a strict system prompt instructing it to answer ONLY using the retrieved passages for `machine.machine_id`, never invent citations, never use general knowledge, and return structured JSON:
+     ```json
+     {
+       "status": "answered" | "insufficient_evidence",
+       "answer": "Clear, thorough maintenance answer grounded strictly in the passages...",
+       "cited_chunk_ids": ["HP-OPS-01_p2", "HP-MNT-01_p3"]
+     }
+     ```
+   - **Crucial Reliability Requirement**: If no external LLM API key is set in `.env` (or if an API call fails/times out during judging), implement a **Smart Extractive & Template Grounded Synthesizer** that synthesizes a precise, judge-ready grounded answer and exact page citations directly from the retrieved passages of the selected machine!
+   - Every citation object saved in `QueryLog.citations` and returned by `POST /api/rag/ask/` MUST contain:
+     - `doc_id` (e.g., `HP-OPS-01`, `HP-MNT-01`, `AC-OM-01`)
+     - `filename` (e.g., `HP200_Operations_Rev1_0.pdf`)
+     - `revision` (e.g., `1.0`)
+     - `page_number` (exact integer PDF page number: `1`, `2`, or `3`)
+     - `passage` (verbatim supporting excerpt from that page)
+     - `pdf_url` (e.g., `/media/manuals/HP200_Operations_Rev1_0.pdf#page=2`)
+
+## 4. Auto-Seeder Command (`python manage.py seed_manuals`)
+Create/update a management command `seed_manuals.py` (and wire it into `seed_users.py` or run it directly) that:
+1. Reads `machine_manual_index.csv` (or creates it in the project root if missing with the exact registration metadata for `M-HP200` and `M-AC90`).
+2. Registers `M-HP200` (`HP-200`) and `M-AC90` (`AC-90`) in the `Machine` table.
+3. Registers the 3 official PDFs (`HP-OPS-01`, `HP-MNT-01`, `AC-OM-01`) in the `Manual` table with `revision="1.0"`, `total_pages=3`, `is_indexed=True`.
+4. Runs PyMuPDF extraction and builds the persistent vector store index for all 3 manuals.
+5. Connects `POST /api/manuals/upload/` in `views.py` so any new PDF uploaded by an Admin is immediately parsed by PyMuPDF and added to the vector store with its `machine_id`, `doc_id`, `revision`, and `page_number`.
+
+## 5. Automated Verification Tests (`manuals_app/tests.py`)
+Expand `manuals_app/tests.py` to test and assert ALL of the following:
+1. **Mandatory Check 1 (Engineer Upload Forbidden)**: Logged-in `ENGINEER` calling `POST /api/manuals/upload/` receives HTTP `403 Forbidden`.
+2. **Mandatory Check 2 (Strict Machine Retrieval Isolation)**: Calling `retrieve_for_machine("M-HP200", "What does E17 mean? High discharge temperature AF-10")` returns ONLY chunks with `machine_id == "M-HP200"` and zero chunks from `M-AC90`.
+3. **E17 Disambiguation Test**:
+   - Asking `"What does E17 mean?"` with `M-HP200` selected returns `status="answered"`, mentions `"Low hydraulic pressure"` and `"110 bar"`, cites BOTH `HP-OPS-01` (page 2) and `HP-MNT-01` (page 3), and does NOT mention `"High discharge temperature"`.
+   - Asking `"What does E17 mean?"` with `M-AC90` selected returns `status="answered"`, mentions `"High discharge temperature"` and `"95 degrees C"`, cites `AC-OM-01` (page 2), and does NOT mention `"Low hydraulic pressure"`.
+4. **Practice Question & Cross-Machine Isolation Tests**:
+   - Asking `"How often should the AC-90 AF-10 filter indicator be checked, and when is the planned filter replacement due?"` with `M-AC90` selected returns `100 operating hours` and `600 operating hours` citing `AC-OM-01` page 3.
+   - Asking the exact same `AC-90 AF-10` question with `M-HP200` selected returns `status="insufficient_evidence"`.
+   - Asking an unanswerable question (e.g., `"What is the replacement pump price and tightening torque?"`) returns `status="insufficient_evidence"`.
+
+# EXECUTION INSTRUCTIONS
+1. Implement all Phase 2 files and update `views.py`.
+2. Run `python manage.py seed_manuals` to index the 3 official manuals.
+3. Run `python manage.py test` and verify all tests pass.
+4. Update `VIBE_CHANGELOG.md` with the complete WHAT / HOW / WHY log for Phase 2.
