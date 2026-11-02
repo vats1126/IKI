@@ -1,0 +1,24 @@
+# ROLE & OBJECTIVE
+You are executing **Phase 5 (Final Master Integration, Live Gemini + Groq Cascading LLM Pipeline & End-to-End Verification)** for **IKI (Industrial Knowledge Intelligence)**.
+
+Your objective is to lock in the live API keys into `.env` and `settings.py`, configure **Gemini 3.5 Flash Lite** as the Primary LLM with **Groq (`llama-3.3-70b-versatile`)** as the automatic live fallback, verify every single requirement from the Round 1 Student Challenge Brief across the entire stack, and ensure the project is 100% submission-ready.
+
+# MANDATORY VIBE-CODING LOGGING PROTOCOL (CRITICAL)
+Before and after every file modification, AND inside `VIBE_CHANGELOG.md`, log every change using this exact structure:
+1. **WHAT Changed:** Exact file paths created or modified and functions/components updated.
+2. **HOW It Changed:** The technical mechanism, cascading LLM failover logic, citation verification, and UI updates implemented.
+3. **WHY It Changed:** The exact hackathon evaluation requirement satisfied.
+
+---
+
+# PHASE 5 SCOPE: LIVE GEMINI PRIMARY + GROQ FALLBACK & FULL SYSTEM CONSOLIDATION
+
+## 1. Lock In Live API Keys in `.env` and `iki_core/settings.py`
+Update `.env` (and reload environment variables in `settings.py` and `rag_engine.py` with `load_dotenv(override=True)`) with the exact credentials provided:
+```env
+USE_SQLITE_FALLBACK=True
+LLM_PROVIDER=auto
+GEMINI_API_KEY=AQ.Ab8RN6JHcx2O_g4lOhlSdpy2sI-TBlU8Kf7IAXH06h2XqtqSWg
+GEMINI_MODEL=gemini-3.5-flash-lite
+GROQ_API_KEY=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
+GROQ_MODEL=llama-3.3-70b-versatile
