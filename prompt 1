@@ -1,0 +1,99 @@
+# ROLE & OBJECTIVE
+You are an expert Python Full-Stack Engineer building **IKI (Industrial Knowledge Intelligence)**, a Manufacturing Manual Assistant using Django, Django REST Framework (DRF), PostgreSQL/MySQL, and a Dark-Themed Neo-Brutalist UI built on Bootstrap 5, HTML, CSS, and Vanilla JS.
+
+# MANDATORY VIBE-CODING LOGGING PROTOCOL (CRITICAL)
+Before and after every file creation or modification, AND inside a persistent file named `VIBE_CHANGELOG.md` in the project root, you MUST log every change using this exact structure:
+1. **WHAT Changed:** Exact file paths created, updated, or deleted, and the components/functions affected.
+2. **HOW It Changed:** The technical mechanism, libraries, classes, or architectural patterns implemented.
+3. **WHY It Changed:** The exact functional requirement from the hackathon brief that this change satisfies (so every team member can explain their contribution to the judges).
+
+Never skip updating `VIBE_CHANGELOG.md` and always print a summary of WHAT / HOW / WHY in your chat response after each step.
+
+---
+
+# PHASE 1 SCOPE: FOUNDATION, DATABASE MODELS, SERVER-SIDE RBAC & DARK NEO-BRUTALIST UI SHELL
+
+Build Phase 1 completely and verify that the server boots without errors.
+
+## 1. Project & Environment Setup
+- Create a Django project named `iki_core` and a main application named `manuals_app`.
+- Create `requirements.txt` containing:
+  `django`, `djangorestframework`, `PyMuPDF`, `chromadb`, `sentence-transformers`, `langchain-text-splitters`, `psycopg2-binary`, `PyMySQL`, `python-dotenv`, `groq`, `google-genai`.
+- Configure `settings.py`:
+  - Support PostgreSQL or MySQL via environment variables (`DB_ENGINE`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT`), with an instant fallback to SQLite (`USE_SQLITE_FALLBACK=True` in `.env`) so development never stalls while setting up the local DB server.
+  - Configure `MEDIA_URL = '/media/'` and `MEDIA_ROOT = BASE_DIR / 'media'` so uploaded PDF manuals can be served directly in the browser with `#page=N` anchors.
+  - Enable `rest_framework` and session authentication.
+
+## 2. Database Models (`manuals_app/models.py`)
+Implement the following models with strict relational integrity:
+
+1. **UserProfile (or Custom User Role Extension)**:
+   - Roles: `ADMIN` (Administrator), `ENGINEER` (Engineer), `SUPERVISOR` (Supervisor).
+   - Helper methods/properties to check `is_admin_role`, `is_engineer_role`, `is_supervisor_role`.
+
+2. **Machine**:
+   - `machine_id` (CharField, unique=True, primary lookup, e.g., `M-HP200`, `M-AC90`)
+   - `name` (CharField, e.g., `HP-200`, `AC-90`)
+   - `description` (TextField, e.g., `Operating overview, limits, alarms`)
+   - `created_at` (DateTimeField, auto_now_add=True)
+
+3. **Manual**:
+   - `machine` (ForeignKey to `Machine`, on_delete=CASCADE, related_name=`manuals`)
+   - `doc_id` (CharField, unique=True, e.g., `HP200_Operations_Rev1_0`)
+   - `title` (CharField)
+   - `revision` (CharField, e.g., `Rev1_0`)
+   - `pdf_file` (FileField, upload_to=`manuals/`)
+   - `is_indexed` (BooleanField, default=False)
+   - `total_pages` (IntegerField, default=0)
+   - `uploaded_by` (ForeignKey to User, null=True)
+   - `uploaded_at` (DateTimeField, auto_now_add=True)
+
+4. **QueryLog**:
+   - `user` (ForeignKey to User, on_delete=SET_NULL, null=True)
+   - `machine` (ForeignKey to `Machine`, on_delete=CASCADE)
+   - `question` (TextField)
+   - `answer` (TextField)
+   - `status` (CharField with choices: `answered`, `insufficient_evidence`)
+   - `citations` (JSONField, default=list) -> stores list of objects: `[{"doc_id": "...", "filename": "...", "revision": "...", "page_number": 1, "passage": "...", "pdf_url": "/media/manuals/file.pdf#page=1"}]`
+   - `created_at` (DateTimeField, auto_now_add=True)
+
+## 3. Strict Server-Side Role Enforcement (`manuals_app/permissions.py`)
+Create custom DRF permission classes and Django view decorators:
+- `IsAdministrator`: Only users with role `ADMIN` can register machines or upload manuals (`POST /api/machines/`, `POST /api/manuals/upload/`). Must return HTTP `403 Forbidden` if an `ENGINEER` or `SUPERVISOR` attempts to upload.
+- `IsEngineerOrAdmin`: Allows `ENGINEER` (and `ADMIN` for testing) to ask questions (`POST /api/rag/ask/`) and fetch their own question history (`GET /api/history/my/`).
+- `IsSupervisorOrAdmin`: Allows `SUPERVISOR` (and `ADMIN`) read-only access to the full question log and filter by `insufficient_evidence` (`GET /api/supervisor/logs/`).
+
+## 4. Demo Users Management Command
+Create a management command `python manage.py seed_users` that automatically creates three test accounts and prints their credentials:
+- `admin_user` / `iki12345` (Role: `ADMIN`)
+- `engineer_user` / `iki12345` (Role: `ENGINEER`)
+- `supervisor_user` / `iki12345` (Role: `SUPERVISOR`)
+
+## 5. Dark-Themed Neo-Brutalist UI (`templates/` & `static/css/iki_brutalist.css`)
+Build the frontend using **Bootstrap 5** combined with a custom **Dark Neo-Brutalist** stylesheet:
+- **Brand Identity**: `IKI // INDUSTRIAL KNOWLEDGE INTELLIGENCE` with a live role badge in the top navbar.
+- **Color Palette**:
+  - Background Primary: `#0B0C10` (Matte Industrial Black)
+  - Panel/Card Surface: `#14161D` (Dark Steel)
+  - Text Primary: `#F4F4F6` (Stark White)
+  - Accent 1 (Primary Action / Highlights): `#CCFF00` (Acid Hazard Yellow) with `#000000` text
+  - Accent 2 (Citations / Machine Badges): `#00F0FF` (Cyber Cyan)
+  - Alert / Insufficient Evidence: `#FF3366` (High-Contrast Crimson)
+- **Neo-Brutalist Styling Rules**:
+  - `border-radius: 0px !important` across all cards, buttons, inputs, and badges.
+  - Thick exposed borders: `2px solid #F4F4F6` on active panels, `2px solid #323644` on secondary panels.
+  - Hard offset shadows: `box-shadow: 5px 5px 0px #CCFF00` on primary buttons/cards; `box-shadow: 4px 4px 0px #000000` on inputs.
+  - Button hover effect: translate `(-2px, -2px)` and expand shadow to `7px 7px 0px #00F0FF`.
+  - Typography: Google Fonts `Space Grotesk` for bold uppercase headers and `JetBrains Mono` for machine IDs, revisions, page citations, and status badges.
+- **Views & Templates to Create Now**:
+  1. **Login Page (`/login/`)**: Brutalist login card + 1-click "Quick Demo Login" buttons for Admin, Engineer, and Supervisor so judges see smooth role switching during the demo.
+  2. **Main Dashboard (`/`)**: Dynamically renders or tabs based on user role:
+     - **Admin Panel**: Machine registration form + PDF Manual Upload form (with Machine selector, Document ID, Revision input, File picker) + Indexed Manuals table.
+     - **Engineer Workspace**: Prominent Machine Selector dropdown (`M-HP200 | HP-200`, `M-AC90 | AC-90`), Maintenance Query input box, Quick Practice Question pills, Grounded Answer Panel, Verifiable Source Passages & `#page=N` Citation Cards, and Personal Saved History sidebar.
+     - **Supervisor Audit Console**: Read-only data table of all queries across engineers, filter toggle for `All` vs `Insufficient Evidence (Unanswered)`, showing timestamp, engineer username, selected machine, question, status badge, and answer preview.
+
+# EXECUTION INSTRUCTIONS
+1. Generate all files for Phase 1.
+2. Run migrations and execute `python manage.py seed_users`.
+3. Update `VIBE_CHANGELOG.md` with the complete Phase 1 log (WHAT, HOW, WHY).
+4. Output a summary of the created files and confirm the server runs cleanly.
