@@ -1,0 +1,55 @@
+# ROLE & OBJECTIVE
+You are completing **Phase 4 (Live LLM & Embedding API Integration + Judge Telemetry + Team Viva Documentation)** for **IKI (Industrial Knowledge Intelligence)**.
+
+The hackathon brief strictly mandates:
+1. "Use embeddings, a vector store, and an LLM for RAG. Restrict retrieval to the selected machine before generating the answer."
+2. "You (the student team) will use your embedding model and LLM access separately."
+3. "Every member must explain their contribution."
+
+Your goal is to integrate **Live LLM Generation & Embeddings (`google-genai` Gemini AND `groq` Llama-3.3)** as the primary RAG generator over the pre-filtered passages, while keeping the Phase 3 deterministic engine as an automatic zero-downtime fallback and citation verifier.
+
+# MANDATORY VIBE-CODING LOGGING PROTOCOL (CRITICAL)
+Before and after every file modification, AND inside `VIBE_CHANGELOG.md`, log every change using this exact structure:
+1. **WHAT Changed:** Exact file paths created or modified and functions/components updated.
+2. **HOW It Changed:** The technical mechanism, LLM prompt engineering, embedding pipeline, and UI telemetry added.
+3. **WHY It Changed:** The exact hackathon requirement satisfied.
+
+---
+
+# PHASE 4 SCOPE: LIVE LLM + EMBEDDING INTEGRATION & JUDGE TELEMETRY
+
+## 1. Live Embedding + Hybrid Vector Store (`manuals_app/vector_store.py`)
+Upgrade `DenseSemanticEmbedder` and `IKIVectorStore`:
+1. **Dual Embedding Support**:
+   - Check if `GEMINI_API_KEY` (or `GOOGLE_API_KEY`) is configured in `.env` or runtime config.
+   - If present, support generating real embeddings via `google.genai` (`text-embedding-004` or `gemini-embedding-001`) with a strict 3-second timeout, OR use the fast 256-dim local semantic + Okapi BM25 hybrid vectors so indexing and queries never hang on slow network connections.
+2. **Strict Pre-Filtering Verification**:
+   - Keep the hard pre-filter `candidates = [doc for doc in self.documents if doc.get("machine_id") == machine_id]` as the very first line of `retrieve_for_machine()`.
+   - Return retrieval metadata alongside the top-k passages (`retrieval_latency_ms`, `total_machine_chunks_searched`, `excluded_other_machine_chunks_count`) so the UI can prove to judges that other machines' chunks were excluded before LLM generation.
+
+## 2. Live LLM Grounded RAG Generator with Strict JSON Schema (`manuals_app/rag_engine.py`)
+Upgrade `generate_grounded_answer(machine, question)` to run a **3-Stage Guarded LLM Pipeline**:
+
+### Stage 1: Hard Cross-Machine & Unprovided Topic Pre-Guard
+- Before calling the LLM, run the fast boundary check:
+  - If `machine.machine_id == "M-HP200"` and the query asks about `AC-90`, `M-AC90`, `AF-10`, `AC-L32`, `E08`, or `condensate-drain`: immediately return `status="insufficient_evidence"` with `citations=[]` and explain that `M-HP200` manuals do not contain `AC-90` data.
+  - If `machine.machine_id == "M-AC90"` and the query asks about `HP-200`, `M-HP200`, `RF-20`, `H46`, `E24`, or `hydraulic press`: immediately return `status="insufficient_evidence"` with `citations=[]`.
+  - If the query asks for explicitly unprovided data (price, cost, supplier contacts, tightening torque, wiring/electrical/hydraulic circuit diagrams, motor rewinding, internal component repair steps, pressure adjustment instructions, cycle-time/repair-time guarantees, or remaining useful life / failure predictions): immediately return `status="insufficient_evidence"` and cite the relevant scope page (`HP-OPS-01` p3 or `AC-OM-01` p3) or empty citations.
+
+### Stage 2: Live LLM Call (Gemini `google-genai` or Groq `llama-3.3-70b-versatile`)
+- Check environment variables (and runtime settings) for `GEMINI_API_KEY` / `GOOGLE_API_KEY` or `GROQ_API_KEY`.
+- Build a strict grounded prompt containing **ONLY** the pre-filtered top passages for `machine.machine_id` (ensuring both `HP-OPS-01` and `HP-MNT-01` passages are included when `M-HP200` is selected):
+  ```text
+  You are IKI, a strict Manufacturing Manual Assistant for machine {machine.machine_id} ({machine.name}).
+  You MUST answer the engineer's question ONLY using the provided manual passages below.
+  CRITICAL RULES:
+  1. Never use outside knowledge or assumptions.
+  2. If the provided passages do not contain enough evidence to answer the question, set "status" to "insufficient_evidence" and state clearly that the available manuals for {machine.machine_id} do not contain enough information.
+  3. Include exact numbers, thresholds, intervals, alarm codes, and filter/fluid IDs from the passages.
+  4. When answering for M-HP200 and evidence comes from both HP-OPS-01 and HP-MNT-01, synthesize both and cite both doc_ids and page_numbers.
+  5. Return ONLY valid JSON matching this schema:
+     {
+       "status": "answered" | "insufficient_evidence",
+       "answer": "Clear, structured maintenance answer grounded strictly in the passages...",
+       "cited_pages": [{"doc_id": "HP-OPS-01", "page_number": 2}]
+     }
