@@ -1,0 +1,80 @@
+# ROLE & OBJECTIVE
+You are executing **Phase 6 (Final Pre-Submission Lock: 4 Core Polish Tasks + Automated Diagnostic Report)** for **IKI (Industrial Knowledge Intelligence)**.
+
+Execute all 4 tasks below sequentially, log every change in `VIBE_CHANGELOG.md` using the mandatory **WHAT / HOW / WHY** format, verify that all automated tests pass, and print the **FINAL DIAGNOSTIC REPORT** at the very end of your response so I can share it for final review.
+
+---
+
+# TASK 1: POSTGRESQL / MYSQL AUTO-DETECTION & PERSISTENCE VERIFICATION
+1. Check if a local PostgreSQL (`localhost:5432`) or MySQL (`localhost:3306`) service is currently running and accessible without a password block.
+2. **If PostgreSQL or MySQL is running and accessible**:
+   - Create the database `iki_manufacturing_db` if it does not exist.
+   - Configure `.env` to connect to it, run `python manage.py migrate`, `python manage.py seed_users`, and `python manage.py seed_manuals`.
+3. **If neither PostgreSQL nor MySQL server daemon is running locally**:
+   - Keep `USE_SQLITE_FALLBACK=True` in `.env` so the app runs with zero errors.
+   - Ensure `iki_core/settings.py` has a clearly commented, production-grade `DATABASES` configuration supporting `postgresql` (`django.db.backends.postgresql`), `mysql` (`django.db.backends.mysql`), and the automatic `sqlite3` fallback so judges inspecting `settings.py` see full PostgreSQL/MySQL support.
+
+---
+
+# TASK 2: 1-CLICK "ENGINEER 403 UPLOAD DENIAL" WIDGET & INSTANT NAVBAR ROLE SWITCHER
+The Evaluation Demonstration Checklist explicitly requires:
+- *"Attempt an upload as an Engineer and show denial; reopen stored history as the appropriate user."*
+- Smooth switching between **Administrator**, **Engineer**, and **Supervisor** workflows.
+
+Implement these two UI enhancements in `templates/base.html` and `templates/dashboard.html`:
+1. **Top Navbar 1-Click Role Switcher (`templates/base.html`)**:
+   - Next to the current user role badge in the top navbar, add a compact **"QUICK ROLE SWITCH"** button group:
+     - `[ADMIN]` (`/login/?demo_role=admin`)
+     - `[ENGINEER]` (`/login/?demo_role=engineer`)
+     - `[SUPERVISOR]` (`/login/?demo_role=supervisor`)
+   - Highlight the currently active role in solid white (`#FFFFFF` background, `#000000` text) so the presenter can switch between Admin, Engineer, and Supervisor in 1 click without logging out first.
+2. **Live "Engineer Upload Denial (HTTP 403 Check)" Action Button (`templates/dashboard.html`)**:
+   - Inside the Engineer Workspace (in the top Demo Presets bar or right next to the Machine Selector), add a button labeled:
+     `[DEMO CHECK 5: ATTEMPT UPLOAD AS ENGINEER (403 TEST)]`
+   - When clicked by an Engineer, JavaScript sends a real `POST /api/manuals/upload/` request (with CSRF token and dummy form data) to the Django server.
+   - Render the live server rejection inside a stark high-contrast alert banner/modal on the Engineer dashboard showing:
+     - `HTTP STATUS: 403 FORBIDDEN (SERVER-SIDE RBAC ENFORCED)`
+     - `ENDPOINT: POST /api/manuals/upload/`
+     - `ACTIVE ROLE: ENGINEER (Upload Restricted to ADMINISTRATOR Only)`
+     - `SERVER PAYLOAD: {"detail": "..."}`
+     - Include a button right inside that banner: `[REOPEN SAVED ENGINEER HISTORY]` which scrolls to / highlights the Engineer's saved question history table and refreshes it via `GET /api/history/my/`.
+
+---
+
+# TASK 3: STRICT 3-PDF CORPUS AUDIT & PRE-POPULATED ENGINEER / SUPERVISOR LOGS
+1. **Strict Corpus Audit**:
+   - Verify `machine_manual_index.csv` in the project root contains ONLY the 3 official manuals:
+     - `HP200_Operations_Rev1_0.pdf` (`HP-OPS-01`, `M-HP200`, `HP-200`, `1.0`)
+     - `HP200_Maintenance_Rev1_0.pdf` (`HP-MNT-01`, `M-HP200`, `HP-200`, `1.0`)
+     - `AC90_Operations_Maintenance_Rev1_0.pdf` (`AC-OM-01`, `M-AC90`, `AC-90`, `1.0`)
+   - Verify `media/vector_index/vector_store.json` contains chunks ONLY from `HP-OPS-01`, `HP-MNT-01`, and `AC-OM-01` (zero chunks from `START_HERE.txt`, challenge brief, or CSV).
+2. **Pre-Seed Rich Audit History (`seed_users.py` / `seed_manuals.py`)**:
+   - Ensure `python manage.py seed_users` pre-populates 5 realistic `QueryLog` records attributed to `engineer_user` (if not already present) covering the exact evaluation scenarios:
+     1. `M-AC90` — `"How often should the AC-90 AF-10 filter indicator be checked, and when is the planned filter replacement due?"` -> `status="answered"`, citing `AC-OM-01` Page 3 (`#page=3`).
+     2. `M-HP200` — `"What does E17 mean, what triggers it, and what checks are required?"` -> `status="answered"`, citing BOTH `HP-OPS-01` Page 2 (`#page=2`) AND `HP-MNT-01` Page 3 (`#page=3`).
+     3. `M-AC90` — `"What does E17 mean?"` -> `status="answered"`, citing `AC-OM-01` Page 2 (`#page=2`).
+     4. `M-HP200` — `"How often should the AC-90 AF-10 filter indicator be checked?"` -> `status="insufficient_evidence"` (Cross-machine isolation proof).
+     5. `M-HP200` — `"What is the replacement pump price, supplier contact, and tightening torque?"` -> `status="insufficient_evidence"` (Missing evidence proof).
+   - This guarantees that as soon as the Engineer opens their Saved History OR the Supervisor opens the Supervisor Audit Console and filters by `Insufficient Evidence`, real verifiable records are immediately visible.
+
+---
+
+# TASK 4: 4-MEMBER VIVA CHEAT SHEET & FINAL DIAGNOSTIC REPORT
+1. Update `TEAM_VIVA_GUIDE.md` so it starts with a **Quick 4-Member Code Defense Cheat Sheet**:
+   - **Member 1 (Backend Architecture, Relational Models & Server-Side RBAC)**: Exact files (`iki_core/settings.py`, `manuals_app/models.py`, `manuals_app/permissions.py`, `manuals_app/views.py`), key classes, and 3 Viva Q&As.
+   - **Member 2 (PyMuPDF Ingestion, Metadata Preservation & Pre-Filtered Hybrid Vector Store)**: Exact files (`manuals_app/vector_store.py`, `manuals_app/management/commands/seed_manuals.py`, `machine_manual_index.csv`), how 1-based page numbers and `machine_id` pre-filtering work, and 3 Viva Q&As.
+   - **Member 3 (3-Tier Cascading LLM Engine, Multi-Doc Synthesis & E17 Disambiguation)**: Exact files (`manuals_app/rag_engine.py`), how Gemini 3.5 Flash Lite -> Groq -> Deterministic Fallback works, how `HP-OPS-01` + `HP-MNT-01` dual citations work, and 3 Viva Q&As.
+   - **Member 4 (Minimalist Neo-Brutalist UI, Split-Screen `#page=N` PDF Viewer & 18+ Automated Tests)**: Exact files (`templates/dashboard.html`, `static/css/iki_brutalist.css`, `manuals_app/tests.py`), how the `#page=N` drawer and 403 test work, and 3 Viva Q&As.
+2. Add an automated test in `manuals_app/tests.py` confirming that the pre-seeded `QueryLog` history is accessible to `engineer_user` (`GET /api/history/my/`) and filterable by `supervisor_user` (`GET /api/supervisor/logs/?status=insufficient_evidence`).
+3. Run `python manage.py seed_users` and `python manage.py test`.
+
+---
+
+# MANDATORY FINAL OUTPUT FORMAT (COPY-PASTE BLOCK)
+At the very end of your response, print a markdown code block titled `=== IKI FINAL SUBMISSION DIAGNOSTIC REPORT ===` containing:
+1. **Database Status**: Active engine (PostgreSQL / MySQL / SQLite Fallback) & total records in `Machine`, `Manual`, and `QueryLog`.
+2. **Vector Store Audit**: Total chunks indexed, breakdown by `doc_id` (`HP-OPS-01`, `HP-MNT-01`, `AC-OM-01`), and confirmation that zero non-manual files are indexed.
+3. **LLM Cascading Pipeline Status**: Configured Primary Model, Secondary Live Failover Model, and Offline Guardrail status.
+4. **5-Point Judge Demo Checklist Verification**: Status (`READY`) for all 5 demonstration items (including the new 1-click Engineer 403 button and Navbar Role Switcher).
+5. **Automated Test Suite Output**: Exact number of tests run, execution time, and pass/fail status.
+6. **Git / Workspace Cleanliness**: Confirmation that `VIBE_CHANGELOG.md`, `TEAM_VIVA_GUIDE.md`, `requirements.txt`, and `machine_manual_index.csv` are saved and the server is live on `http://127.0.0.1:8000/`.
