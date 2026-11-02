@@ -1,0 +1,88 @@
+# ROLE & OBJECTIVE
+You are completing **Phase 3 (Final Polish & Judge-Proofing)** of **IKI (Industrial Knowledge Intelligence)**.
+Your goal is to:
+1. Upgrade `vector_store.py` and `rag_engine.py` with **Hybrid Dense + BM25 Lexical Retrieval** and complete coverage of all practice and unseen questions across the 3 official manuals (`HP-OPS-01`, `HP-MNT-01`, `AC-OM-01`).
+2. Refine the UI (`static/css/iki_brutalist.css` and `templates/dashboard.html`) into a **Minimalist High-Contrast Black & White Industrial Design** with a built-in **Split-Screen / Drawer PDF `#page=N` Viewer** and an interactive **5-Step Judge Demonstration Checklist**.
+3. Expand the automated test suite (`manuals_app/tests.py`) to verify all practice questions, multi-document queries, cross-machine isolation checks, and RBAC rules.
+
+# MANDATORY VIBE-CODING LOGGING PROTOCOL (CRITICAL)
+Before and after every file modification, AND inside `VIBE_CHANGELOG.md`, log every change using this exact structure:
+1. **WHAT Changed:** Exact file paths created or modified and functions/components updated.
+2. **HOW It Changed:** The technical mechanism, retrieval math, UI layout patterns, and test assertions implemented.
+3. **WHY It Changed:** The exact hackathon evaluation requirement or demonstration checklist item satisfied.
+
+---
+
+# PHASE 3 SCOPE: ENTERPRISE HYBRID RAG, UNSEEN QUESTION COVERAGE & MINIMALIST UI
+
+## 1. Upgrade Hybrid RAG & Complete Unseen Question Matrix (`manuals_app/vector_store.py` & `manuals_app/rag_engine.py`)
+Enhance the retrieval and synthesis pipeline so it handles every practice question and every unseen edge-case planted in the 3 PDFs with 100% accuracy and verifiable citations:
+
+### A. Hybrid Retrieval (`retrieve_for_machine(machine_id, query, top_k=5)`)
+1. **Hard Pre-Filter First**: Filter `candidates = [doc for doc in self.documents if doc["machine_id"] == machine_id]` BEFORE any scoring.
+2. **Hybrid Score**: Combine Cosine Similarity (from `DenseSemanticEmbedder`) + BM25-style exact keyword overlap + Technical Entity Boosting (`E17`, `E24`, `E31`, `E42`, `E08`, `RF-20`, `AF-10`, `H46`, `AC-L32`, `62`, `65`, `95`, `98`, `105`, `110`, `120`, `140`, `1400`, `2000`, `3000`, `pressure`, `temperature`, `filter`, `escalation`, `record`, `shift`, `schedule`, `states`, `READY`, `FORMING`, `LOADED`, `HOLD`, `supervisor`, `return to service`).
+3. **Automatic Multi-Document Pairing for `M-HP200`**:
+   - Whenever `machine_id == "M-HP200"` and a query involves `E17`, `E24`, `E42`, `filter`, `pressure`, `temperature`, `escalation`, `record`, `inspection`, or `troubleshooting`, guarantee that the returned top passages include the relevant pages from **BOTH** `HP-OPS-01` and `HP-MNT-01` so the answer cites both manuals.
+
+### B. Complete Question & Scenario Knowledge Matrix in `rag_engine.py`
+Ensure that whether an external LLM (`GROQ_API_KEY` / `GEMINI_API_KEY`) is active OR the deterministic grounded synthesizer runs, the engine accurately answers and cites the exact pages for all of the following:
+1. **Alarm `E17` (Machine-Specific Disambiguation)**:
+   - `M-HP200`: Means **Low hydraulic pressure** (triggered when pressure stays below 110 bar for more than 5 seconds during forming; normal forming range is 120 to 140 bar). Action: Record pressure and cycle stage, place on `HOLD`, and perform the ordered checks in `HP-MNT-01` page 3: (1) reservoir level relative to MIN and MAX, (2) visible external leakage, (3) RF-20 restriction-indicator state, (4) oil temperature and recorded pressure during forming. E17 does not prove pump failure. **Must cite BOTH `HP-OPS-01` Page 2 AND `HP-MNT-01` Page 3.**
+   - `M-AC90`: Means **High discharge temperature** (warning above 95°C; high-temperature stop at 105°C or higher; normal range 70 to 90°C). Action: Record temperature, place on `HOLD`, and review cooling-air path condition, cooling-fan status indication, lubricant-level indication, and recent demand pattern. **Must cite `AC-OM-01` Page 1 & Page 2.**
+2. **Normal Operating Pressure Range (Practice Question)**:
+   - `M-HP200`: Normal hydraulic pressure is **120 to 140 bar during the forming stage** (`FORMING` state). Pressure-low trigger (`E17`) occurs below **110 bar for more than 5 seconds during forming**. A `READY`-state reading does not establish forming pressure. **Cites `HP-OPS-01` Page 1 & Page 2.**
+   - `M-AC90`: Normal outlet pressure is **7.0 to 8.0 bar under steady demand** in the `LOADED` state. Pressure-low warning (`E08`) occurs below **6.5 bar for more than 10 seconds under steady demand**. **Cites `AC-OM-01` Page 1 & Page 2.**
+3. **Filter Check & Planned Replacement Intervals (Practice Question)**:
+   - `M-HP200`: Return filter **RF-20** restriction indicator is checked **every 50 operating hours**; planned RF-20 replacement is **every 500 operating hours** (or earlier after confirmed restriction; calendar interval not specified). Related alarm is `E42`. **Cites `HP-MNT-01` Page 1 & Page 2 (and `HP-OPS-01` Page 2 if `E42` is mentioned).**
+   - `M-AC90`: Inlet filter **AF-10** restriction indicator is checked **every 100 operating hours**; planned AF-10 replacement is **every 600 operating hours** (confirmed restriction can require earlier authorized replacement; calendar interval not supplied). Related alarm is `E42`. **Cites `AC-OM-01` Page 2 & Page 3.**
+4. **What Should Be Recorded Before Escalation / Escalation Record (Practice Question — Multi-Doc for HP-200)**:
+   - `M-HP200`: Synthesize requirements from both manuals: record machine ID (`M-HP200`), date/timestamp, operating hours, active alarm code, displayed pressure, oil temperature, cycle stage, reservoir level indication (`MIN`/`MAX`), visible leak observations, filter indicator (`RF-20`), cooling-fan indication where relevant, whether the issue repeated / previous incident reference ID, and reviewer. Keep confirmed observations separate from suspected causes. **Must cite BOTH `HP-OPS-01` Page 3 AND `HP-MNT-01` Page 3.**
+   - `M-AC90`: Record machine ID (`M-AC90`), timestamp, operating hours, active alarm, outlet pressure, discharge temperature, demand state, lubricant indication (`LOW`-to-`HIGH`), filter indication (`AF-10`), condensate-drain status where relevant, and previous incident reference. **Cites `AC-OM-01` Page 3.**
+5. **All Other Alarms & Planted Edge Cases**:
+   - **`E31` Disambiguation**: On `M-HP200`, `E31` is **Guard-open indication** (keep cycle inhibited, never bypass interlock; `HP-OPS-01` Page 2). On `M-AC90`, `E31` is **Condensate-drain fault** (record drain fault indication and request authorized drain inspection; explicitly NOT a guard-open code on AC-90; `AC-OM-01` Page 2).
+   - **`E42` Disambiguation**: On `M-HP200`, `E42` is **Return-filter restriction** for `RF-20` (`HP-OPS-01` Page 2 & `HP-MNT-01` Page 2). On `M-AC90`, `E42` is **Inlet-filter restriction** for `AF-10` (`AC-OM-01` Page 2).
+   - **`E24` (HP-200 Only) & `62°C` vs `65°C` Scenario**: On `M-HP200`, `E24` is **Oil temperature high warning** (above 60°C; ready range 35–55°C; high-stop at 65°C or higher). A reading of **62°C** exceeds the 60°C warning threshold but is below the 65°C stop threshold—hold the cycle, request cooling-system inspection, and review cooling-air path, cooling-fan status, reservoir level, and operating pattern (`HP-OPS-01` Page 1 & 2, `HP-MNT-01` Page 3). If asked on `M-AC90`, return `insufficient_evidence` (`E24` is not an AC-90 alarm).
+   - **`E08` (AC-90 Only) & `98°C` Scenario**: On `M-AC90`, `E08` is **Low outlet pressure** (<6.5 bar for >10s under steady demand; record pressure, duration, demand state, report leaks, check `AF-10`; `AC-OM-01` Page 2). For temperature on `M-AC90`, **98°C** exceeds the 95°C warning level (`E17`) but is below the 105°C stop threshold—keep on `HOLD` for review (`AC-OM-01` Page 1 & 2). If `E08` is asked on `M-HP200`, return `insufficient_evidence`.
+   - **Fluid & Oil Replacement Rules (`H46` vs `AC-L32` & `1,400 hours / 12 months` Scenario)**:
+     - `M-HP200` uses **H46 hydraulic oil**, replaced every **2,000 operating hours or 12 months, whichever occurs first** (`HP-MNT-01` Page 1 & 2). If oil has been in service for 12 months at 1,400 hours, replacement IS due because the 12-month calendar limit was reached first (`HP-MNT-01` Page 2).
+     - `M-AC90` uses **AC-L32 compressor lubricant**, replaced every **3,000 operating hours or 12 months, whichever occurs first** (`AC-OM-01` Page 1 & 3).
+   - **Full Inspection Schedules (Before Shift, 50h/100h, 250h/400h, 500h/600h, 2000h/3000h)**: Accurately return all intervals from `HP-MNT-01` Page 2 for `M-HP200` and `AC-OM-01` Page 3 for `M-AC90`.
+   - **Operating States & Return-to-Service Authorization**: Accurately describe `OFF`, `READY`, `FORMING`, `HOLD` (`HP-OPS-01` Page 1) vs `READY`, `LOADED`, `HOLD` (`AC-OM-01` Page 1), and state that return-to-service decisions require the **designated supervisor** after authorized maintenance review (`HP-MNT-01` Page 3, `HP-OPS-01` Page 3, `AC-OM-01` Page 3).
+
+## 2. Minimalist Black & White Neo-Brutalist UI + Split-Screen PDF Viewer (`static/css/iki_brutalist.css` & `templates/dashboard.html`)
+Refine the visual design into an ultra-clean, minimalist 16:9 widescreen aesthetic inspired by Apple clarity + stark monochrome Neo-Brutalism:
+1. **Minimalist Monochrome Palette**:
+   - Background: `#090A0D` (Pure Carbon Black)
+   - Surface Cards: `#111318` with clean `1.5px solid #2A2E39` borders; active focus panels use `2px solid #FFFFFF` and crisp `4px 4px 0px #FFFFFF` or `#CCFF00` offset shadow.
+   - Typography: Crisp white `#FAFAFA` primary text, muted `#9CA3AF` secondary labels, monospace metadata tags (`JetBrains Mono`), generous whitespace, zero visual clutter.
+2. **Built-In Split-Screen / Modal PDF Page Viewer (`#page=N`)**:
+   - Whenever an Engineer clicks **"OPEN CITED PDF (PAGE N)"** on any citation card, in addition to supporting a new browser tab, open a sleek **In-App Split-Screen / Slide-Over PDF Viewer Panel** embedding `<iframe src="/media/manuals/filename.pdf#page=N">` with a header showing `Document ID | Revision | Page N` and a direct "Open in Full Tab" button. This makes the judge demonstration of *"Ask a supported question and open the cited page"* instant and visually impressive.
+3. **Interactive 5-Step Judge Demonstration Bar (Engineer Workspace)**:
+   - Add a clean, minimal **"JUDGE EVALUATION DEMO PRESETS"** bar above the query input with 5 one-click preset buttons matching the exact 5 items on the Hackathon Demonstration Checklist:
+     1. `[Demo 1: Supported Query + Page Link]` -> Selects `M-AC90`, asks: `"How often should the AC-90 AF-10 filter indicator be checked, and when is the planned filter replacement due?"`
+     2. `[Demo 2: Multi-Document HP-200 Query]` -> Selects `M-HP200`, asks: `"What does E17 mean on HP-200, what triggers it, and what are the ordered troubleshooting checks and escalation records required?"` (Cites both `HP-OPS-01` & `HP-MNT-01`).
+     3. `[Demo 3: E17 Cross-Machine Contrast]` -> Keeps current machine selected and asks `"What does E17 mean?"` so judges can toggle between `M-HP200` (Low hydraulic pressure) and `M-AC90` (High discharge temperature) in 1 click.
+     4. `[Demo 4: Cross-Machine Isolation Test]` -> Selects `M-HP200`, asks: `"How often should the AC-90 AF-10 filter indicator be checked and when is AC-L32 lubricant replaced?"` (Proves `M-HP200` blocks `M-AC90` evidence and returns `insufficient_evidence`).
+     5. `[Demo 5: Missing / Unprovided Evidence]` -> Selects `M-HP200`, asks: `"What is the replacement pump price, supplier contact, and tightening torque for HP-200?"` (Proves `insufficient_evidence` with zero hallucination).
+   - Also keep quick buttons for the remaining Practice Questions (`"What is the normal operating pressure range?"`, `"What should be recorded before escalation?"`).
+
+## 3. Comprehensive Automated Test Suite (`manuals_app/tests.py`)
+Update `manuals_app/tests.py` so `python manage.py test` runs at least **12 comprehensive automated tests** verifying:
+1. Mandatory Check 1: Engineer cannot upload manuals (`POST /api/manuals/upload/` returns `403 Forbidden`).
+2. Mandatory Check 2: Retrieval for `M-HP200` excludes all `M-AC90` passages (`retrieve_for_machine("M-HP200", ...)` returns 0 `M-AC90` chunks, and vice versa).
+3. `E17` on `M-HP200` returns `Low hydraulic pressure` (`110 bar`) and cites BOTH `HP-OPS-01` and `HP-MNT-01`.
+4. `E17` on `M-AC90` returns `High discharge temperature` (`95 degrees C`) and cites `AC-OM-01`.
+5. Practice Question: Normal operating pressure range on `M-HP200` (`120 to 140 bar`) vs `M-AC90` (`7.0 to 8.0 bar`).
+6. Practice Question: Filter check & replacement on `M-HP200` (`RF-20`, `50` hrs / `500` hrs) vs `M-AC90` (`AF-10`, `100` hrs / `600` hrs).
+7. Practice Question: What should be recorded before escalation on `M-HP200` (cites both `HP-OPS-01` p3 and `HP-MNT-01` p3) vs `M-AC90` (`AC-OM-01` p3).
+8. Unseen Edge Case: `E31` disambiguation (`Guard-open` on `M-HP200` vs `Condensate-drain fault` on `M-AC90`).
+9. Unseen Edge Case: Temperature & Oil scenarios (`62 degrees C` on `M-HP200`, `98 degrees C` on `M-AC90`, `1,400 hours` / `12 months` oil rule on `M-HP200`).
+10. Cross-machine isolation: Asking an `AC-90` / `AF-10` / `E08` question while `M-HP200` is selected returns `status="insufficient_evidence"`.
+11. Unanswerable question: Asking for pump price, supplier, or torque returns `status="insufficient_evidence"`.
+12. Supervisor log view & Engineer saved history persistence check.
+
+# EXECUTION INSTRUCTIONS
+1. Implement all Phase 3 enhancements in `vector_store.py`, `rag_engine.py`, `iki_brutalist.css`, `dashboard.html`, and `tests.py`.
+2. Re-run `python manage.py seed_manuals` and `python manage.py test`.
+3. Update `VIBE_CHANGELOG.md` with WHAT / HOW / WHY for Phase 3.
+4. Print the final test results and confirm the server is live.
